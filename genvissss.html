@@ -1105,7 +1105,7 @@ const btnClearMedia = $("#btn-clear-media");
 function updateMediaUI(){
   const isMediaScene = mediaScenes.has(state.scene);
   mediaBar.style.display = isMediaScene ? "flex" : "none";
-  dropOverlay.style.display = (isMediaScene && !media.ready) ? "flex" : "none";
+  dropOverlay.style.display = "none";
   btnClearMedia.style.display = media.ready ? "inline-flex" : "none";
   uploadLabel.textContent = media.ready ? (media.name.length>18 ? media.name.slice(0,16)+"…" : media.name) : "Upload image / video";
 }
@@ -1559,16 +1559,16 @@ function buildDemoImage(){
 
 // ---- MEDIA HELPERS ----
 function sampleMediaToCanvas(){
-  if(!media.ready) return false;
-  // fit media into W×H preserving aspect (cover)
-  const mw = media.width, mh = media.height;
+  const src = media.ready ? media.el : demoCanvas;
+  const mw  = media.ready ? media.width  : demoCanvas.width;
+  const mh  = media.ready ? media.height : demoCanvas.height;
   const ratio = Math.max(W/mw, H/mh);
   const dw = mw*ratio, dh = mh*ratio;
   const dx = (W-dw)/2, dy = (H-dh)/2;
   mediaCanvas.width = W; mediaCanvas.height = H;
   mediaCtx.fillStyle = state.bg;
   mediaCtx.fillRect(0,0,W,H);
-  try{ mediaCtx.drawImage(media.el, dx, dy, dw, dh); } catch(e){ return false; }
+  try{ mediaCtx.drawImage(src, dx, dy, dw, dh); } catch(e){ return false; }
   return true;
 }
 
