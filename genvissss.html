@@ -1297,8 +1297,6 @@ $("#btn-record").addEventListener("click", ()=>{
   _recorder && _recorder.state !== "inactive" ? stopRecording() : startRecording();
 });
 
-$("#btn-search").addEventListener("click", ()=> flashButton("#btn-search"));
-
 function flashButton(sel){
   const b = $(sel);
   b.style.transform = "scale(.92)";
@@ -2637,22 +2635,6 @@ document.addEventListener("keydown", e=>{
   });
 })();
 
-// ========= TWEAKS PANEL (Inspect button) =========
-(()=>{
-  // Replace the flash-only handler with a proper toggle
-  const tweaks = $("#tweaks");
-  const btnSearch = $("#btn-search");
-  btnSearch.title = "Tweaks";
-  btnSearch.addEventListener("click", ()=>{
-    const on = tweaks.classList.toggle("on");
-    btnSearch.style.background = on ? "var(--ink)" : "";
-    btnSearch.style.color = on ? "#fff" : "";
-    btnSearch.style.borderColor = on ? "var(--ink)" : "";
-  });
-  // Position tweaks near the toolstrip
-  tweaks.style.right = "72px";
-  tweaks.style.bottom = "20px";
-})();
 
 // ========= INIT =========
 renderParams();
