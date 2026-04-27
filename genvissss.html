@@ -313,7 +313,7 @@
   }
   .topbar{
     position: absolute; top: 0; right: 0;
-    display: flex; gap: 8px; padding: 14px;
+    display: flex; flex-direction: column; gap: 8px; padding: 14px;
     z-index: 10;
   }
   .iconbtn{
@@ -622,9 +622,6 @@
   <!-- ============ SIDEBAR ============ -->
   <aside class="sidebar">
     <div class="sidebar-head">
-      <button class="home-btn" aria-label="Home" title="Home">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
-      </button>
       <div class="file">
         <span class="name" id="file-name">Liquid Chrome.genvissss</span>
         <span class="sub"><span id="scene-label">Flow Waves</span></span>
@@ -724,18 +721,18 @@
   <!-- ============ CANVAS AREA ============ -->
   <section class="canvas-wrap">
     <div class="topbar">
-      <button class="iconbtn" title="Capture frame" id="btn-capture">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 6l2-3h4l2 3"/></svg>
+      <button class="iconbtn" title="Fullscreen" id="btn-full">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9V3h6"/><path d="M21 9V3h-6"/><path d="M3 15v6h6"/><path d="M21 15v6h-6"/></svg>
+      </button>
+      <button class="iconbtn" title="Save" id="btn-save">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
       </button>
       <button class="iconbtn" title="Record" id="btn-record">
         <svg class="rec-idle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.5" fill="#E8473B"/></svg>
         <span class="rec-dot"></span>
       </button>
-      <button class="iconbtn" title="Save" id="btn-save">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
-      </button>
-      <button class="iconbtn" title="Fullscreen" id="btn-full">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9V3h6"/><path d="M21 9V3h-6"/><path d="M3 15v6h6"/><path d="M21 15v6h-6"/></svg>
+      <button class="iconbtn" title="Capture frame" id="btn-capture">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 6l2-3h4l2 3"/></svg>
       </button>
     </div>
 
@@ -766,9 +763,6 @@
   <aside class="toolstrip">
     <button class="tool" title="Randomize" id="btn-random">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.2"/><circle cx="16" cy="8" r="1.2"/><circle cx="16" cy="16" r="1.2"/><circle cx="8" cy="16" r="1.2"/><circle cx="12" cy="12" r="1.2"/></svg>
-    </button>
-    <button class="tool" title="Inspect" id="btn-search">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
     </button>
     <button class="tool" title="Reset" id="btn-reset">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
