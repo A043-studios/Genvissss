@@ -880,6 +880,7 @@ let state = {
     binary:    { size:10, contrast:1.1, opacity:0.75, invert:0, charset:0, tint:0 },
     track:     { count:12, sensitivity:0.55, size:0.14, connect:0.7, labels:1, jitter:0.3 },
     cctv:      { grid:3, contrast:1.4, noise:0.25, scan:0.55, tint:0.15, zoom:0.4 },
+    dissolve:  { resolution:5, spacing:3, size:4, grain:2, imgOpacity:5, imgBlur:6 },
   }
 };
 
@@ -965,10 +966,18 @@ const paramDefs = {
     { key:"tint",     label:"Tint",     min:0, max:1,  step:0.01, fmt:v=>(v*100).toFixed(0)+"%" },
     { key:"zoom",     label:"Zoom Var", min:0, max:1,  step:0.01, fmt:v=>(v*100).toFixed(0)+"%" },
   ],
+  dissolve: [
+    { key:"resolution", label:"Resolution", min:1, max:8, step:1, fmt:v=>(v|0)+"" },
+    { key:"spacing",    label:"Spacing",    min:1, max:8, step:1, fmt:v=>(v|0)+"" },
+    { key:"size",       label:"Dot Size",   min:1, max:8, step:1, fmt:v=>(v|0)+"" },
+    { key:"grain",      label:"Grain",      min:1, max:8, step:1, fmt:v=>(v|0)+"" },
+    { key:"imgOpacity", label:"Img Opacity",min:1, max:8, step:1, fmt:v=>(v|0)+"" },
+    { key:"imgBlur",    label:"Img Blur",   min:1, max:8, step:1, fmt:v=>(v|0)+"" },
+  ],
 };
 
-const sceneTitles = { recolor:"Recolor", dither:"Dither", halftone:"Halftone", ascii:"ASCII", glitch:"Glitch", tone:"Tone", mosaic:"Mosaic", binary:"Binary", track:"Track", cctv:"CCTV" };
-const mediaScenes = new Set(["recolor","dither","halftone","ascii","glitch","tone","mosaic","binary","track","cctv"]);
+const sceneTitles = { recolor:"Recolor", dither:"Dither", halftone:"Halftone", ascii:"ASCII", glitch:"Glitch", tone:"Tone", mosaic:"Mosaic", binary:"Binary", track:"Track", cctv:"CCTV", dissolve:"Dissolve" };
+const mediaScenes = new Set(["recolor","dither","halftone","ascii","glitch","tone","mosaic","binary","track","cctv","dissolve"]);
 
 // ========= DOM =========
 const $ = q => document.querySelector(q);
