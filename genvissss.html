@@ -658,6 +658,7 @@
             <div class="scene-card" data-scene="binary"><div class="thumb" id="thumb-binary"></div><span class="tag">Binary</span></div>
             <div class="scene-card" data-scene="track"><div class="thumb" id="thumb-track"></div><span class="tag">Track</span></div>
             <div class="scene-card" data-scene="cctv"><div class="thumb" id="thumb-cctv"></div><span class="tag">CCTV</span></div>
+            <div class="scene-card" data-scene="dissolve"><div class="thumb" id="thumb-dissolve"></div><span class="tag">Dissolve</span></div>
           </div>
           <div id="media-bar" style="margin-top:10px;display:none;gap:6px;">
             <button id="btn-upload" style="flex:1;padding:8px;border-radius:9px;border:1px dashed var(--muted-2);background:transparent;font:inherit;font-size:11.5px;color:var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
@@ -1490,7 +1491,7 @@ function drawGrain(alpha=0.08){
 
 // ========= THUMBS (mini-renders) =========
 function renderThumbs(){
-  ["recolor","dither","halftone","ascii","glitch","tone","mosaic","binary","track","cctv"].forEach(name=>{
+  ["recolor","dither","halftone","ascii","glitch","tone","mosaic","binary","track","cctv","dissolve"].forEach(name=>{
     const el = document.getElementById("thumb-"+name);
     if(!el) return;
     el.style.background = thumbBgFor(name);
@@ -1512,6 +1513,12 @@ function thumbBgFor(name){
     repeating-linear-gradient(90deg,transparent 0 calc(33.3% - 1px),#111 calc(33.3% - 1px) 33.3%) 0 0/100% 100%,
     ${pal.d}
   `;
+  if(name==="dissolve")  return `radial-gradient(circle at 30% 40%, #2d6fe8 0%, transparent 45%),
+    radial-gradient(circle at 70% 30%, #1eb89e 0%, transparent 40%),
+    radial-gradient(circle at 50% 55%, #c0325a 0%, transparent 50%),
+    radial-gradient(circle at 20% 70%, #3ab800 0%, transparent 35%),
+    radial-gradient(circle at 80% 65%, #d07020 0%, transparent 40%),
+    #f5f5f4`;
   return "#111";
 }
 
