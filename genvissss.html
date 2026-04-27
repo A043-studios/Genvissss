@@ -2313,6 +2313,103 @@ function drawCCTV(time){
   if(state.grain) drawGrain(0.07);
 }
 
+// ---- Scene: DISSOLVE ----
+function drawDissolve(){
+  sampleMediaToCanvas();
+  const p = state.params.dissolve;
+  const rng = mulberry32(state.seed);
+
+  // Sample pixels from the W×H media canvas
+  const imgData = mediaCtx.getImageData(0, 0, W, H);
+  const pixels  = imgData.data;
+
+  // White background
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  // Blurred background image layer
+  const bgOpacity = gmap(p.imgOpacity, 1, 8, 0, 0.92);
+  const blurPx    = gmap(p.imgBlur,    1, 8, 0, 65);
+  if(bgOpacity > 0.01){
+    ctx.save();
+    if(blurPx > 0.5) ctx.filter = `blur(${blurPx}px)`;
+    ctx.globalAlpha = bgOpacity;
+    const m = blurPx * 1.6;
+    ctx.drawImage(mediaCanvas, -m, -m, W + m*2, H + m*2);
+    ctx.restore();
+  }
+
+  // Dot grid
+  let step = gmap(p.resolution, 1, 8, 80, 10);
+  step    *= gmap(p.spacing,    1, 8, 1.9, 0.52);
+  const baseDotR    = step * gmap(p.size,  1, 8, 0.13, 0.52);
+  const maxDisplace = step * gmap(p.grain, 1, 8, 0, 0.65);
+
+  const dots = [];
+  for(let gy = step * 0.5; gy <= H; gy += step){
+    for(let gx = step * 0.5; gx <= W; gx += step){
+      const px = gx + (rng() * 2 - 1) * maxDisplace;
+      const py = gy + (rng() * 2 - 1) * maxDisplace;
+      const ix = px | 0;
+      const iy = py | 0;
+      if(ix < 0 || ix >= W || iy < 0 || iy >= H) continue;
+      const pidx = (iy * W + ix) * 4;
+      const r = pixels[pidx], g = pixels[pidx+1], b = pixels[pidx+2], a = pixels[pidx+3];
+      if(a < 10) continue;
+
+      const maxC = Math.max(r,g,b) / 255;
+      const minC = Math.min(r,g,b) / 255;
+      const sat  = maxC > 0 ? (maxC - minC) / maxC : 0;
+      const lum  = (r*0.299 + g*0.587 + b*0.114) / 255;
+      const dotR = baseDotR * gmap(sat*0.6 + lum*0.4, 0, 1, 0.35, 1.55);
+      dots.push({ x:px, y:py, r:dotR, cr:r, cg:g, cb:b });
+    }
+  }
+
+  // Glow pass — offscreen canvas blurred onto main
+  const glowMult = gmap(baseDotR, 3, 30, 3.5, 2.2);
+  const glowBlur = gmap(baseDotR, 3, 30, 3, 10);
+  const glowOff  = new OffscreenCanvas(W, H);
+  const glowCtx  = glowOff.getContext('2d');
+  for(const d of dots){
+    glowCtx.fillStyle = `rgba(${d.cr},${d.cg},${d.cb},${160/255})`;
+    glowCtx.beginPath();
+    glowCtx.arc(d.x, d.y, d.r * glowMult, 0, Math.PI*2);
+    glowCtx.fill();
+  }
+  ctx.save();
+  ctx.filter = `blur(${glowBlur}px)`;
+  ctx.globalAlpha = 0.68;
+  ctx.drawImage(glowOff, 0, 0);
+  ctx.restore();
+
+  // Sharp dots
+  for(const d of dots){
+    ctx.fillStyle = `rgba(${d.cr},${d.cg},${d.cb},${230/255})`;
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, d.r, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // Sparkles
+  const sparkleCount = Math.floor(gmap(p.grain, 1, 8, 0, 500));
+  for(let i = 0; i < sparkleCount; i++){
+    const sx  = rng() * W;
+    const sy  = rng() * H;
+    const six = Math.max(0, Math.min(W-1, sx | 0));
+    const siy = Math.max(0, Math.min(H-1, sy | 0));
+    const pidx = (siy * W + six) * 4;
+    const r = pixels[pidx], g = pixels[pidx+1], b = pixels[pidx+2];
+    const mix   = rng() * 0.52 + 0.45;
+    const sr    = rng() * 2.1  + 0.5;
+    const alpha = rng() * 0.49 + 0.51;
+    ctx.fillStyle = `rgba(${(r+(255-r)*mix)|0},${(g+(255-g)*mix)|0},${(b+(255-b)*mix)|0},${alpha})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, sr, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
 function drawMediaEmpty(){
   ctx.fillStyle = state.bg;
   ctx.fillRect(0,0,W,H);
