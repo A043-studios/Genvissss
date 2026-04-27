@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dot Dissolve — Spectral Atomization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #fff;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        /* Canvas fills the full viewport */
+        #canvas-wrap {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+        }
+
+        #canvas-wrap canvas {
+            display: block;
+            width: 100vw !important;
+            height: 100vh !important;
+        }
+
+        /* Drop overlay */
+        #drop-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            background: rgba(217,119,87,0.10);
+            border: 3px dashed #d97757;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            font-weight: 500;
+            color: #d97757;
+            pointer-events: none;
+        }
+        #drop-overlay.active { display: flex; }
+
+        /* ── Floating control panel ── */
+        #panel {
+            position: fixed;
+            bottom: 28px;
+            left: 28px;
+            z-index: 10;
+            width: 260px;
+            background: rgba(14, 14, 12, 0.88);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            border-radius: 16px;
+            padding: 18px 18px 16px;
+            color: #e8e6dc;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+            user-select: none;
+        }
+
+        #panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+            cursor: pointer;
+        }
+
+        #panel-title {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.13em;
+            text-transform: uppercase;
+            color: #b0aea5;
+        }
+
+        #toggle-btn {
+            background: none;
+            border: none;
+            color: #b0aea5;
+            font-size: 14px;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+        #toggle-btn:hover { color: #e8e6dc; }
+
+        #panel-body { transition: opacity 0.2s; }
+        #panel-body.collapsed { display: none; }
+
+        /* Upload row */
+        #upload-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,0.07);
+            border: 1px dashed rgba(255,255,255,0.18);
+            border-radius: 8px;
+            padding: 8px 10px;
+            width: 100%;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            font-size: 11px;
+            color: #b0aea5;
+            margin-bottom: 14px;
+            transition: all 0.2s;
+        }
+        #upload-btn:hover, #upload-btn.drag-over {
+            border-color: #d97757;
+            color: #e8e6dc;
+            background: rgba(217,119,87,0.10);
+        }
+        #upload-btn .icon { font-size: 14px; }
+        #upload-btn .label { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* Divider */
+        .divider {
+            height: 1px;
+            background: rgba(255,255,255,0.08);
+            margin: 12px 0;
+        }
+
+        /* Sliders */
+        .row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 9px;
+        }
+        .row:last-child { margin-bottom: 0; }
+
+        .row label {
+            font-size: 10px;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #888;
+            width: 76px;
+            flex-shrink: 0;
+        }
+
+        .row input[type=range] {
+            flex: 1;
+            height: 3px;
+            -webkit-appearance: none;
+            background: rgba(255,255,255,0.15);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+        }
+        .row input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 13px; height: 13px;
+            background: #d97757;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.15s;
+        }
+        .row input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+        .row input[type=range]::-moz-range-thumb {
+            width: 13px; height: 13px;
+            background: #d97757;
+            border-radius: 50%;
+            border: none;
+        }
+
+        .val {
+            font-size: 10px;
+            font-family: 'Courier New', monospace;
+            color: #666;
+            width: 14px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        /* Seed row */
+        #seed-row {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        #seed-input {
+            flex: 1;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            color: #e8e6dc;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            padding: 5px 7px;
+            text-align: center;
+            outline: none;
+        }
+        #seed-input:focus { border-color: #d97757; }
+
+        /* Action buttons */
+        .btn-row {
+            display: flex;
+            gap: 5px;
+            margin-top: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            border: none;
+            border-radius: 6px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 7px 4px;
+            cursor: pointer;
+            transition: all 0.18s;
+        }
+        .btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
+        .btn:active { transform: translateY(0); }
+
+        .btn-orange { background: #d97757; color: #fff; }
+        .btn-blue   { background: #4a7baf; color: #fff; }
+        .btn-green  { background: #5a7845; color: #fff; }
+        .btn-ghost  { background: rgba(255,255,255,0.09); color: #b0aea5; }
+
+        /* Status bar */
+        #status {
+            position: fixed;
+            bottom: 12px;
+            right: 20px;
+            font-size: 9.5px;
+            color: rgba(140,138,132,0.7);
+            letter-spacing: 0.04em;
+            z-index: 5;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Full-screen canvas -->
+<div id="canvas-wrap"></div>
+<div id="drop-overlay">Drop image to dissolve</div>
+<div id="status">Spectral Atomization</div>
+
+<!-- Floating panel -->
+<div id="panel">
+    <div id="panel-header" onclick="togglePanel()">
+        <span id="panel-title">Dot Dissolve</span>
+        <button id="toggle-btn" title="Collapse">▾</button>
+    </div>
+
+    <div id="panel-body">
+        <!-- Upload -->
+        <button id="upload-btn">
+            <span class="icon">⊕</span>
+            <span class="label" id="upload-label">Drop or click to upload image</span>
+        </button>
+        <input type="file" id="file-input" accept="image/*" style="display:none">
+
+        <!-- Sliders -->
+        <div class="row">
+            <label>Resolution</label>
+            <input type="range" id="resolution" min="1" max="8" step="1" value="5"
+                   oninput="updateParam('resolution', +this.value)">
+            <span class="val" id="resolution-val">5</span>
+        </div>
+        <div class="row">
+            <label>Spacing</label>
+            <input type="range" id="spacing" min="1" max="8" step="1" value="3"
+                   oninput="updateParam('spacing', +this.value)">
+            <span class="val" id="spacing-val">3</span>
+        </div>
+        <div class="row">
+            <label>Size</label>
+            <input type="range" id="size" min="1" max="8" step="1" value="4"
+                   oninput="updateParam('size', +this.value)">
+            <span class="val" id="size-val">4</span>
+        </div>
+        <div class="row">
+            <label>Grain</label>
+            <input type="range" id="grain" min="1" max="8" step="1" value="2"
+                   oninput="updateParam('grain', +this.value)">
+            <span class="val" id="grain-val">2</span>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="row">
+            <label>Img Opacity</label>
+            <input type="range" id="imageOpacity" min="1" max="8" step="1" value="5"
+                   oninput="updateParam('imageOpacity', +this.value)">
+            <span class="val" id="imageOpacity-val">5</span>
+        </div>
+        <div class="row">
+            <label>Img Blur</label>
+            <input type="range" id="imageBlur" min="1" max="8" step="1" value="6"
+                   oninput="updateParam('imageBlur', +this.value)">
+            <span class="val" id="imageBlur-val">6</span>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Seed -->
+        <div id="seed-row">
+            <button class="btn btn-ghost" onclick="prevSeed()" style="flex:0;padding:5px 9px;">←</button>
+            <input type="number" id="seed-input" value="42" onchange="updateSeed()">
+            <button class="btn btn-ghost" onclick="nextSeed()" style="flex:0;padding:5px 9px;">→</button>
+            <button class="btn btn-green" onclick="randomSeedFn()" style="flex:0;padding:5px 9px;">⟳</button>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="btn-row">
+            <button class="btn btn-blue"  onclick="exportSVG()">SVG</button>
+            <button class="btn btn-orange" onclick="exportPNG()">PNG</button>
+            <button class="btn btn-ghost" onclick="resetParams()">Reset</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// PARAMETERS
+// ═══════════════════════════════════════════════════════
+
+let params = {
+    seed:         42,
+    resolution:   5,   // 1=coarse, 8=fine
+    spacing:      3,
+    size:         4,
+    grain:        2,
+    imageOpacity: 5,
+    imageBlur:    6
+};
+const DEFAULTS = { ...params };
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+
+let sourceImg  = null;   // p5.Graphics demo or p5.Image from user
+let isDemo     = true;
+let dots       = [];
+let panelOpen  = true;
+
+// ═══════════════════════════════════════════════════════
+// P5 SETUP
+// ═══════════════════════════════════════════════════════
+
+function setup() {
+    pixelDensity(1);
+    let cnv = createCanvas(windowWidth, windowHeight);
+    cnv.parent('canvas-wrap');
+    noLoop();
+    buildDemoImage();
+    redraw();
+}
+
+function windowResized() {
+    resizeCanvas(windowWidth, windowHeight);
+    redraw();
+}
+
+function draw() { renderScene(); }
+
+// ═══════════════════════════════════════════════════════
+// DEMO IMAGE — vivid blobs on white
+// ═══════════════════════════════════════════════════════
+
+function buildDemoImage() {
+    if (sourceImg && sourceImg.remove) sourceImg.remove();
+    randomSeed(params.seed * 13 + 7);
+    noiseSeed(params.seed * 17 + 3);
+
+    const G = createGraphics(900, 900);
+    G.pixelDensity(1);
+    G.noStroke();
+    G.background(255);
+
+    // Eight vivid anchor blobs, positions jittered by seed
+    const anchors = [
+        { cx: 150, cy: 150, r: 280, cr:  45, cg: 110, cb: 235 },  // blue
+        { cx: 750, cy: 120, r: 240, cr:  30, cg: 185, cb: 165 },  // teal
+        { cx: 420, cy: 350, r: 320, cr: 215, cg:  50, cb: 105 },  // crimson centre
+        { cx:  90, cy: 580, r: 200, cr:  75, cg: 175, cb:  45 },  // green
+        { cx: 790, cy: 520, r: 260, cr: 235, cg: 145, cb:  25 },  // amber
+        { cx: 230, cy: 770, r: 195, cr: 190, cg:  60, cb: 215 },  // violet
+        { cx: 670, cy: 780, r: 220, cr: 235, cg:  85, cb:  45 },  // orange
+        { cx: 430, cy: 120, r: 165, cr: 130, cg:  55, cb: 250 },  // purple
+    ];
+
+    for (let i = 0; i < anchors.length; i++) {
+        const a   = anchors[i];
+        const ox  = (random() - 0.5) * 100;
+        const oy  = (random() - 0.5) * 100;
+        const cx  = constrain(a.cx + ox, 0, 900);
+        const cy  = constrain(a.cy + oy, 0, 900);
+
+        for (let rad = a.r; rad > 0; rad -= 3) {
+            G.fill(a.cr, a.cg, a.cb, map(rad, 0, a.r, 210, 0));
+            G.circle(cx, cy, rad * 2);
+        }
+    }
+
+    G.loadPixels();
+    sourceImg = G;
+    isDemo    = true;
+}
+
+// ═══════════════════════════════════════════════════════
+// CORE RENDER
+// ═══════════════════════════════════════════════════════
+
+function renderScene() {
+    if (!sourceImg) return;
+    dots = [];
+
+    const imgW  = sourceImg.width;
+    const imgH  = sourceImg.height;
+
+    // Fit image into viewport (cover, centred)
+    const scale = max(width / imgW, height / imgH);
+    const iw    = imgW * scale;
+    const ih    = imgH * scale;
+    const ox    = (width  - iw) / 2;
+    const oy    = (height - ih) / 2;
+
+    // ── White background ─────────────────────────────
+    background(255);
+
+    // ── Soft blurred image layer ─────────────────────
+    const bgOpacity = map(params.imageOpacity, 1, 8, 0, 0.92);
+    const blurPx    = map(params.imageBlur,    1, 8, 0, 65);
+
+    if (bgOpacity > 0.01) {
+        const el = sourceImg.elt || sourceImg.canvas;
+        if (el) {
+            drawingContext.save();
+            if (blurPx > 0.5) drawingContext.filter = `blur(${blurPx}px)`;
+            drawingContext.globalAlpha = bgOpacity;
+            const m = blurPx * 1.6;
+            drawingContext.drawImage(el, ox - m, oy - m, iw + m * 2, ih + m * 2);
+            drawingContext.restore();
+        }
+    }
+
+    // ── Dot grid params ──────────────────────────────
+    let step  = map(params.resolution, 1, 8, 80, 10);
+    step     *= map(params.spacing,    1, 8, 1.9, 0.52);
+
+    const baseDotR    = step * map(params.size,  1, 8, 0.13, 0.52);
+    const maxDisplace = step * map(params.grain, 1, 8, 0,    0.65);
+
+    randomSeed(params.seed);
+
+    // ── Collect dots ─────────────────────────────────
+    const x0 = ox;
+    const y0 = oy;
+    const x1 = ox + iw;
+    const y1 = oy + ih;
+
+    for (let gy = y0 + step * 0.5; gy <= y1; gy += step) {
+        for (let gx = x0 + step * 0.5; gx <= x1; gx += step) {
+            const px = gx + random(-maxDisplace, maxDisplace);
+            const py = gy + random(-maxDisplace, maxDisplace);
+
+            const imgX = floor((px - ox) / scale);
+            const imgY = floor((py - oy) / scale);
+            if (imgX < 0 || imgX >= imgW || imgY < 0 || imgY >= imgH) continue;
+
+            const pidx = (imgY * imgW + imgX) * 4;
+            const r    = sourceImg.pixels[pidx];
+            const g    = sourceImg.pixels[pidx + 1];
+            const b    = sourceImg.pixels[pidx + 2];
+            const a    = sourceImg.pixels[pidx + 3];
+            if (a < 10) continue;
+
+            // ── Variable dot size by SATURATION + LUMINANCE ──────────
+            // Saturation: how vivid the colour is (0=grey, 1=pure hue)
+            const maxC  = max(r, g, b) / 255;
+            const minC  = min(r, g, b) / 255;
+            const sat   = maxC > 0 ? (maxC - minC) / maxC : 0;
+
+            // Luminance (perceived)
+            const lum   = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+
+            // Bright saturated dots → large; dark/grey dots → small
+            // Range: 0.35× to 1.55× base size
+            const sizeFactor = map(sat * 0.6 + lum * 0.4, 0, 1, 0.35, 1.55);
+            const dotR = baseDotR * sizeFactor;
+
+            dots.push({ x: px, y: py, r: dotR, cr: r, cg: g, cb: b });
+        }
+    }
+
+    // ── Pass 1: Glow halos (blurred oversized dots) ──────────────────
+    const glowBuf = createGraphics(width, height);
+    glowBuf.pixelDensity(1);
+    glowBuf.noStroke();
+    glowBuf.clear();
+
+    const glowMult = map(baseDotR, 3, 30, 3.5, 2.2);
+    for (const d of dots) {
+        glowBuf.fill(d.cr, d.cg, d.cb, 160);
+        glowBuf.ellipse(d.x, d.y, d.r * glowMult * 2, d.r * glowMult * 2);
+    }
+    const blurAmt = map(baseDotR, 3, 30, 3, 10);
+    glowBuf.filter(BLUR, blurAmt);
+
+    drawingContext.save();
+    drawingContext.globalAlpha = 0.68;
+    drawingContext.drawImage(glowBuf.elt, 0, 0);
+    drawingContext.restore();
+    glowBuf.remove();
+
+    // ── Pass 2: Sharp solid dots ──────────────────────────────────────
+    noStroke();
+    for (const d of dots) {
+        fill(d.cr, d.cg, d.cb, 230);
+        ellipse(d.x, d.y, d.r * 2, d.r * 2);
+    }
+
+    // ── Grain sparkles ────────────────────────────────────────────────
+    const sparkleCount = floor(map(params.grain, 1, 8, 0, 500));
+    for (let i = 0; i < sparkleCount; i++) {
+        const sx   = random(x0, x1);
+        const sy   = random(y0, y1);
+        const imgX = constrain(floor((sx - ox) / scale), 0, imgW - 1);
+        const imgY = constrain(floor((sy - oy) / scale), 0, imgH - 1);
+        const pidx = (imgY * imgW + imgX) * 4;
+        const r    = sourceImg.pixels[pidx];
+        const g    = sourceImg.pixels[pidx + 1];
+        const b    = sourceImg.pixels[pidx + 2];
+        const mix  = random(0.45, 0.97);
+
+        fill(
+            lerp(r, 255, mix),
+            lerp(g, 255, mix),
+            lerp(b, 255, mix),
+            random(130, 255)
+        );
+        const sr = random(0.5, 2.6);
+        ellipse(sx, sy, sr * 2, sr * 2);
+    }
+
+    // ── Status ────────────────────────────────────────
+    document.getElementById('status').textContent =
+        `Spectral Atomization  ·  ${dots.length} dots  ·  seed ${params.seed}  ·  ${isDemo ? 'demo' : 'image'}`;
+}
+
+// ═══════════════════════════════════════════════════════
+// IMAGE UPLOAD
+// ═══════════════════════════════════════════════════════
+
+function handleFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const url = URL.createObjectURL(file);
+    loadImage(url, function(loaded) {
+        if (sourceImg && sourceImg.remove) sourceImg.remove();
+        sourceImg = loaded;
+        sourceImg.loadPixels();
+        isDemo = false;
+        document.getElementById('upload-label').textContent = file.name;
+        URL.revokeObjectURL(url);
+        redraw();
+    });
+}
+
+document.getElementById('upload-btn').addEventListener('click', () =>
+    document.getElementById('file-input').click()
+);
+
+document.getElementById('file-input').addEventListener('change', function(e) {
+    handleFile(e.target.files[0]);
+    this.value = '';
+});
+
+// Drag-drop on upload button
+const uploadBtn = document.getElementById('upload-btn');
+uploadBtn.addEventListener('dragover',  e => { e.preventDefault(); uploadBtn.classList.add('drag-over'); });
+uploadBtn.addEventListener('dragleave', ()  => uploadBtn.classList.remove('drag-over'));
+uploadBtn.addEventListener('drop',      e  => {
+    e.preventDefault();
+    uploadBtn.classList.remove('drag-over');
+    handleFile(e.dataTransfer.files[0]);
+});
+
+// Drag-drop on whole page
+const dropOL = document.getElementById('drop-overlay');
+document.body.addEventListener('dragover',  e  => { e.preventDefault(); dropOL.classList.add('active'); });
+document.body.addEventListener('dragleave', e  => { if (!e.relatedTarget) dropOL.classList.remove('active'); });
+document.body.addEventListener('drop',      e  => {
+    e.preventDefault();
+    dropOL.classList.remove('active');
+    handleFile(e.dataTransfer.files[0]);
+});
+
+// ═══════════════════════════════════════════════════════
+// CONTROLS
+// ═══════════════════════════════════════════════════════
+
+function updateParam(name, val) {
+    params[name] = val;
+    document.getElementById(name + '-val').textContent = val;
+    redraw();
+}
+
+function updateSeed() {
+    const v = parseInt(document.getElementById('seed-input').value);
+    if (v > 0) {
+        params.seed = v;
+        if (isDemo) buildDemoImage();
+        redraw();
+    }
+}
+
+function prevSeed() {
+    params.seed = Math.max(1, params.seed - 1);
+    document.getElementById('seed-input').value = params.seed;
+    if (isDemo) buildDemoImage();
+    redraw();
+}
+
+function nextSeed() {
+    params.seed++;
+    document.getElementById('seed-input').value = params.seed;
+    if (isDemo) buildDemoImage();
+    redraw();
+}
+
+function randomSeedFn() {
+    params.seed = Math.floor(Math.random() * 999998) + 1;
+    document.getElementById('seed-input').value = params.seed;
+    if (isDemo) buildDemoImage();
+    redraw();
+}
+
+function resetParams() {
+    Object.assign(params, DEFAULTS);
+    ['resolution','spacing','size','grain','imageOpacity','imageBlur'].forEach(k => {
+        document.getElementById(k).value          = params[k];
+        document.getElementById(k + '-val').textContent = params[k];
+    });
+    document.getElementById('seed-input').value = params.seed;
+    if (isDemo) buildDemoImage();
+    redraw();
+}
+
+// ═══════════════════════════════════════════════════════
+// PANEL TOGGLE
+// ═══════════════════════════════════════════════════════
+
+function togglePanel() {
+    panelOpen = !panelOpen;
+    document.getElementById('panel-body').classList.toggle('collapsed', !panelOpen);
+    document.getElementById('toggle-btn').textContent = panelOpen ? '▾' : '▸';
+}
+
+// ═══════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════
+
+function exportPNG() {
+    saveCanvas('dot-dissolve', 'png');
+}
+
+function exportSVG() {
+    if (!dots.length) return;
+    const W = width, H = height;
+    const lines = [
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`,
+        `<rect width="${W}" height="${H}" fill="#ffffff"/>`,
+        ...dots.map(d =>
+            `<circle cx="${d.x.toFixed(1)}" cy="${d.y.toFixed(1)}" r="${d.r.toFixed(1)}" fill="rgb(${d.cr},${d.cg},${d.cb})" opacity="0.9"/>`
+        ),
+        '</svg>'
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'image/svg+xml' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'dot-dissolve.svg';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
