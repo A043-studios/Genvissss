@@ -658,6 +658,7 @@
             <div class="scene-card" data-scene="binary"><div class="thumb" id="thumb-binary"></div><span class="tag">Binary</span></div>
             <div class="scene-card" data-scene="track"><div class="thumb" id="thumb-track"></div><span class="tag">Track</span></div>
             <div class="scene-card" data-scene="cctv"><div class="thumb" id="thumb-cctv"></div><span class="tag">CCTV</span></div>
+            <div class="scene-card" data-scene="dissolve"><div class="thumb" id="thumb-dissolve"></div><span class="tag">Dissolve</span></div>
           </div>
           <div id="media-bar" style="margin-top:10px;display:none;gap:6px;">
             <button id="btn-upload" style="flex:1;padding:8px;border-radius:9px;border:1px dashed var(--muted-2);background:transparent;font:inherit;font-size:11.5px;color:var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
@@ -880,6 +881,7 @@ let state = {
     binary:    { size:10, contrast:1.1, opacity:0.75, invert:0, charset:0, tint:0 },
     track:     { count:12, sensitivity:0.55, size:0.14, connect:0.7, labels:1, jitter:0.3 },
     cctv:      { grid:3, contrast:1.4, noise:0.25, scan:0.55, tint:0.15, zoom:0.4 },
+    dissolve:  { resolution:5, spacing:3, size:4, grain:2, imgOpacity:5, imgBlur:6 },
   }
 };
 
@@ -965,10 +967,18 @@ const paramDefs = {
     { key:"tint",     label:"Tint",     min:0, max:1,  step:0.01, fmt:v=>(v*100).toFixed(0)+"%" },
     { key:"zoom",     label:"Zoom Var", min:0, max:1,  step:0.01, fmt:v=>(v*100).toFixed(0)+"%" },
   ],
+  dissolve: [
+    { key:"resolution", label:"Resolution", min:1, max:8, step:1, fmt:v=>(v|0)+"" },
+    { key:"spacing",    label:"Spacing",    min:1, max:8, step:1, fmt:v=>(v|0)+"" },
+    { key:"size",       label:"Dot Size",   min:1, max:8, step:1, fmt:v=>(v|0)+"" },
+    { key:"grain",      label:"Grain",      min:1, max:8, step:1, fmt:v=>(v|0)+"" },
+    { key:"imgOpacity", label:"Img Opacity",min:1, max:8, step:1, fmt:v=>(v|0)+"" },
+    { key:"imgBlur",    label:"Img Blur",   min:1, max:8, step:1, fmt:v=>(v|0)+"" },
+  ],
 };
 
-const sceneTitles = { recolor:"Recolor", dither:"Dither", halftone:"Halftone", ascii:"ASCII", glitch:"Glitch", tone:"Tone", mosaic:"Mosaic", binary:"Binary", track:"Track", cctv:"CCTV" };
-const mediaScenes = new Set(["recolor","dither","halftone","ascii","glitch","tone","mosaic","binary","track","cctv"]);
+const sceneTitles = { recolor:"Recolor", dither:"Dither", halftone:"Halftone", ascii:"ASCII", glitch:"Glitch", tone:"Tone", mosaic:"Mosaic", binary:"Binary", track:"Track", cctv:"CCTV", dissolve:"Dissolve" };
+const mediaScenes = new Set(["recolor","dither","halftone","ascii","glitch","tone","mosaic","binary","track","cctv","dissolve"]);
 
 // ========= DOM =========
 const $ = q => document.querySelector(q);
@@ -1095,7 +1105,7 @@ const btnClearMedia = $("#btn-clear-media");
 function updateMediaUI(){
   const isMediaScene = mediaScenes.has(state.scene);
   mediaBar.style.display = isMediaScene ? "flex" : "none";
-  dropOverlay.style.display = (isMediaScene && !media.ready) ? "flex" : "none";
+  dropOverlay.style.display = "none";
   btnClearMedia.style.display = media.ready ? "inline-flex" : "none";
   uploadLabel.textContent = media.ready ? (media.name.length>18 ? media.name.slice(0,16)+"…" : media.name) : "Upload image / video";
 }
@@ -1231,6 +1241,7 @@ $("#pal-random").addEventListener("click", ()=>{
 $("#btn-random").addEventListener("click", ()=>{
   state.seed = Math.floor(Math.random()*9000+1000);
   $("#seed").innerHTML = "seed <b>#"+state.seed+"</b>";
+  buildDemoImage();
   // randomize params subtly
   const defs = paramDefs[state.scene];
   for(const d of defs){
@@ -1333,6 +1344,8 @@ $$("[data-group] .group-head").forEach(h=>{
 // Tiny deterministic hash / noise
 function mulberry32(a){ return function(){ let t = a += 0x6D2B79F5; t = Math.imul(t ^ t>>>15, t|1); t ^= t + Math.imul(t ^ t>>>7, t|61); return ((t ^ t>>>14) >>> 0)/4294967296; } }
 function lerp(a,b,t){ return a+(b-a)*t; }
+function gmap(v,a,b,c,d){ return c+(d-c)*(v-a)/(b-a); }
+let demoCanvas = null;
 function hexToRgb(h){ const n = parseInt(h.slice(1),16); return [(n>>16)&255, (n>>8)&255, n&255]; }
 function rgbStr(r,g,b,a=1){ return `rgba(${r|0},${g|0},${b|0},${a})`; }
 function mixRgb(c1,c2,t){ return [lerp(c1[0],c2[0],t), lerp(c1[1],c2[1],t), lerp(c1[2],c2[2],t)]; }
@@ -1481,7 +1494,7 @@ function drawGrain(alpha=0.08){
 
 // ========= THUMBS (mini-renders) =========
 function renderThumbs(){
-  ["recolor","dither","halftone","ascii","glitch","tone","mosaic","binary","track","cctv"].forEach(name=>{
+  ["recolor","dither","halftone","ascii","glitch","tone","mosaic","binary","track","cctv","dissolve"].forEach(name=>{
     const el = document.getElementById("thumb-"+name);
     if(!el) return;
     el.style.background = thumbBgFor(name);
@@ -1503,21 +1516,60 @@ function thumbBgFor(name){
     repeating-linear-gradient(90deg,transparent 0 calc(33.3% - 1px),#111 calc(33.3% - 1px) 33.3%) 0 0/100% 100%,
     ${pal.d}
   `;
+  if(name==="dissolve")  return `radial-gradient(circle at 30% 40%, #2d6fe8 0%, transparent 45%),
+    radial-gradient(circle at 70% 30%, #1eb89e 0%, transparent 40%),
+    radial-gradient(circle at 50% 55%, #c0325a 0%, transparent 50%),
+    radial-gradient(circle at 20% 70%, #3ab800 0%, transparent 35%),
+    radial-gradient(circle at 80% 65%, #d07020 0%, transparent 40%),
+    #f5f5f4`;
   return "#111";
+}
+
+function buildDemoImage(){
+  demoCanvas = new OffscreenCanvas(900, 900);
+  const g = demoCanvas.getContext('2d');
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, 900, 900);
+
+  const anchors = [
+    { cx:150, cy:150, r:280, cr:45,  cg:110, cb:235 },
+    { cx:750, cy:120, r:240, cr:30,  cg:185, cb:165 },
+    { cx:420, cy:350, r:320, cr:215, cg:50,  cb:105 },
+    { cx:90,  cy:580, r:200, cr:75,  cg:175, cb:45  },
+    { cx:790, cy:520, r:260, cr:235, cg:145, cb:25  },
+    { cx:230, cy:770, r:195, cr:190, cg:60,  cb:215 },
+    { cx:670, cy:780, r:220, cr:235, cg:85,  cb:45  },
+    { cx:430, cy:120, r:165, cr:130, cg:55,  cb:250 },
+  ];
+
+  const rng = mulberry32(state.seed * 13 + 7);
+  for(const a of anchors){
+    const ox = (rng() - 0.5) * 100;
+    const oy = (rng() - 0.5) * 100;
+    const cx = Math.max(0, Math.min(900, a.cx + ox));
+    const cy = Math.max(0, Math.min(900, a.cy + oy));
+    for(let rad = a.r; rad > 0; rad -= 3){
+      g.fillStyle = `rgba(${a.cr},${a.cg},${a.cb},${210*(1-rad/a.r)/255})`;
+      g.beginPath();
+      g.arc(cx, cy, rad, 0, Math.PI*2);
+      g.fill();
+    }
+  }
 }
 
 // ---- MEDIA HELPERS ----
 function sampleMediaToCanvas(){
-  if(!media.ready) return false;
-  // fit media into W×H preserving aspect (cover)
-  const mw = media.width, mh = media.height;
+  const src = media.ready ? media.el : demoCanvas;
+  if(!src) return false;
+  const mw  = media.ready ? media.width  : demoCanvas.width;
+  const mh  = media.ready ? media.height : demoCanvas.height;
   const ratio = Math.max(W/mw, H/mh);
   const dw = mw*ratio, dh = mh*ratio;
   const dx = (W-dw)/2, dy = (H-dh)/2;
   mediaCanvas.width = W; mediaCanvas.height = H;
   mediaCtx.fillStyle = state.bg;
   mediaCtx.fillRect(0,0,W,H);
-  try{ mediaCtx.drawImage(media.el, dx, dy, dw, dh); } catch(e){ return false; }
+  try{ mediaCtx.drawImage(src, dx, dy, dw, dh); } catch(e){ return false; }
   return true;
 }
 
@@ -2262,6 +2314,104 @@ function drawCCTV(time){
   if(state.grain) drawGrain(0.07);
 }
 
+// ---- Scene: DISSOLVE ----
+function drawDissolve(){
+  if(!sampleMediaToCanvas()) return;
+  const p = state.params.dissolve;
+  const rng = mulberry32(state.seed);
+
+  // Sample pixels from the W×H media canvas
+  const imgData = mediaCtx.getImageData(0, 0, W, H);
+  const pixels  = imgData.data;
+
+  // White background
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  // Blurred background image layer
+  const bgOpacity = gmap(p.imgOpacity, 1, 8, 0, 0.92);
+  const blurPx    = gmap(p.imgBlur,    1, 8, 0, 65);
+  if(bgOpacity > 0.01){
+    ctx.save();
+    if(blurPx > 0.5) ctx.filter = `blur(${blurPx}px)`;
+    ctx.globalAlpha = bgOpacity;
+    const m = blurPx * 1.6;
+    ctx.drawImage(mediaCanvas, -m, -m, W + m*2, H + m*2);
+    ctx.restore();
+  }
+
+  // Dot grid
+  let step = gmap(p.resolution, 1, 8, 80, 10);
+  step    *= gmap(p.spacing,    1, 8, 1.9, 0.52);
+  const baseDotR    = step * gmap(p.size,  1, 8, 0.13, 0.52);
+  const maxDisplace = step * gmap(p.grain, 1, 8, 0, 0.65);
+
+  const dots = [];
+  for(let gy = step * 0.5; gy <= H; gy += step){
+    for(let gx = step * 0.5; gx <= W; gx += step){
+      const px = gx + (rng() * 2 - 1) * maxDisplace;
+      const py = gy + (rng() * 2 - 1) * maxDisplace;
+      const ix = px | 0;
+      const iy = py | 0;
+      if(ix < 0 || ix >= W || iy < 0 || iy >= H) continue;
+      const pidx = (iy * W + ix) * 4;
+      const r = pixels[pidx], g = pixels[pidx+1], b = pixels[pidx+2], a = pixels[pidx+3];
+      if(a < 10) continue;
+
+      const maxC = Math.max(r,g,b) / 255;
+      const minC = Math.min(r,g,b) / 255;
+      const sat  = maxC > 0 ? (maxC - minC) / maxC : 0;
+      const lum  = (r*0.299 + g*0.587 + b*0.114) / 255;
+      const dotR = baseDotR * gmap(sat*0.6 + lum*0.4, 0, 1, 0.35, 1.55);
+      dots.push({ x:px, y:py, r:dotR, cr:r, cg:g, cb:b });
+    }
+  }
+
+  // Glow pass — offscreen canvas blurred onto main
+  const clampedDotR = Math.max(3, Math.min(30, baseDotR));
+  const glowMult = gmap(clampedDotR, 3, 30, 3.5, 2.2);
+  const glowBlur = gmap(clampedDotR, 3, 30, 3, 10);
+  const glowOff  = new OffscreenCanvas(W, H);
+  const glowCtx  = glowOff.getContext('2d');
+  for(const d of dots){
+    glowCtx.fillStyle = `rgba(${d.cr},${d.cg},${d.cb},${160/255})`;
+    glowCtx.beginPath();
+    glowCtx.arc(d.x, d.y, d.r * glowMult, 0, Math.PI*2);
+    glowCtx.fill();
+  }
+  ctx.save();
+  ctx.filter = `blur(${glowBlur}px)`;
+  ctx.globalAlpha = 0.68;
+  ctx.drawImage(glowOff, 0, 0);
+  ctx.restore();
+
+  // Sharp dots
+  for(const d of dots){
+    ctx.fillStyle = `rgba(${d.cr},${d.cg},${d.cb},${230/255})`;
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, d.r, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // Sparkles
+  const sparkleCount = Math.floor(gmap(p.grain, 1, 8, 0, 500));
+  for(let i = 0; i < sparkleCount; i++){
+    const sx  = rng() * W;
+    const sy  = rng() * H;
+    const six = Math.max(0, Math.min(W-1, sx | 0));
+    const siy = Math.max(0, Math.min(H-1, sy | 0));
+    const pidx = (siy * W + six) * 4;
+    const r = pixels[pidx], g = pixels[pidx+1], b = pixels[pidx+2];
+    const mix   = rng() * 0.52 + 0.45;
+    const sr    = rng() * 2.1  + 0.5;
+    const alpha = rng() * 0.49 + 0.51;
+    ctx.fillStyle = `rgba(${(r+(255-r)*mix)|0},${(g+(255-g)*mix)|0},${(b+(255-b)*mix)|0},${alpha})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, sr, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
 function drawMediaEmpty(){
   ctx.fillStyle = state.bg;
   ctx.fillRect(0,0,W,H);
@@ -2285,16 +2435,17 @@ function loop(t){
 
   const time = t - state.t0;
   switch(state.scene){
-    case "recolor":   drawRecolor(time); break;
-    case "dither":    drawDither(time); break;
+    case "recolor":   drawRecolor(time);  break;
+    case "dither":    drawDither(time);   break;
     case "halftone":  drawHalftone(time); break;
-    case "ascii":     drawAscii(time); break;
-    case "glitch":    drawGlitch(time); break;
-    case "tone":      drawTone(time); break;
-    case "mosaic":    drawMosaic(time); break;
-    case "binary":    drawBinary(time); break;
-    case "track":     drawTrack(time); break;
-    case "cctv":      drawCCTV(time);  break;
+    case "ascii":     drawAscii(time);    break;
+    case "glitch":    drawGlitch(time);   break;
+    case "tone":      drawTone(time);     break;
+    case "mosaic":    drawMosaic(time);   break;
+    case "binary":    drawBinary(time);   break;
+    case "track":     drawTrack(time);    break;
+    case "cctv":      drawCCTV(time);     break;
+    case "dissolve":  drawDissolve();     break;
   }
 
   requestAnimationFrame(loop);
@@ -2544,6 +2695,7 @@ updateDim();
 updateFilename();
 updateMediaUI();
 resizeCanvas();
+buildDemoImage();
 requestAnimationFrame(loop);
 
 </script>
