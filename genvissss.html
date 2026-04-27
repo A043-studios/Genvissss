@@ -2433,16 +2433,17 @@ function loop(t){
 
   const time = t - state.t0;
   switch(state.scene){
-    case "recolor":   drawRecolor(time); break;
-    case "dither":    drawDither(time); break;
+    case "recolor":   drawRecolor(time);  break;
+    case "dither":    drawDither(time);   break;
     case "halftone":  drawHalftone(time); break;
-    case "ascii":     drawAscii(time); break;
-    case "glitch":    drawGlitch(time); break;
-    case "tone":      drawTone(time); break;
-    case "mosaic":    drawMosaic(time); break;
-    case "binary":    drawBinary(time); break;
-    case "track":     drawTrack(time); break;
-    case "cctv":      drawCCTV(time);  break;
+    case "ascii":     drawAscii(time);    break;
+    case "glitch":    drawGlitch(time);   break;
+    case "tone":      drawTone(time);     break;
+    case "mosaic":    drawMosaic(time);   break;
+    case "binary":    drawBinary(time);   break;
+    case "track":     drawTrack(time);    break;
+    case "cctv":      drawCCTV(time);     break;
+    case "dissolve":  drawDissolve();     break;
   }
 
   requestAnimationFrame(loop);
