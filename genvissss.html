@@ -1560,6 +1560,7 @@ function buildDemoImage(){
 // ---- MEDIA HELPERS ----
 function sampleMediaToCanvas(){
   const src = media.ready ? media.el : demoCanvas;
+  if(!src) return false;
   const mw  = media.ready ? media.width  : demoCanvas.width;
   const mh  = media.ready ? media.height : demoCanvas.height;
   const ratio = Math.max(W/mw, H/mh);
@@ -2315,7 +2316,7 @@ function drawCCTV(time){
 
 // ---- Scene: DISSOLVE ----
 function drawDissolve(){
-  sampleMediaToCanvas();
+  if(!sampleMediaToCanvas()) return;
   const p = state.params.dissolve;
   const rng = mulberry32(state.seed);
 
@@ -2367,8 +2368,9 @@ function drawDissolve(){
   }
 
   // Glow pass — offscreen canvas blurred onto main
-  const glowMult = gmap(baseDotR, 3, 30, 3.5, 2.2);
-  const glowBlur = gmap(baseDotR, 3, 30, 3, 10);
+  const clampedDotR = Math.max(3, Math.min(30, baseDotR));
+  const glowMult = gmap(clampedDotR, 3, 30, 3.5, 2.2);
+  const glowBlur = gmap(clampedDotR, 3, 30, 3, 10);
   const glowOff  = new OffscreenCanvas(W, H);
   const glowCtx  = glowOff.getContext('2d');
   for(const d of dots){
