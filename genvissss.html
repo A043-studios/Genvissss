@@ -1121,6 +1121,23 @@ function loadMedia(file){
   }
 }
 
+function loadMediaFromUrl(url, name){
+  clearMedia();
+  media.name = name || url.split('/').pop();
+  const v = document.createElement("video");
+  v.src = url; v.loop = true; v.muted = true; v.playsInline = true; v.autoplay = true;
+  v.addEventListener("loadeddata", ()=>{
+    media.type = "video"; media.el = v; media.width = v.videoWidth; media.height = v.videoHeight;
+    media.ready = true; v.play().catch(()=>{});
+    if(state.scene==="cctv"){
+      const p = state.params.cctv;
+      const cols = Math.max(2,Math.min(4,p.grid|0));
+      buildCCTVCams(cols*cols);
+    }
+    updateMediaUI();
+  });
+}
+
 mediaInput.addEventListener("change", e => loadMedia(e.target.files[0]));
 $("#btn-upload").addEventListener("click", ()=> mediaInput.click());
 btnClearMedia.addEventListener("click", e => { e.stopPropagation(); clearMedia(); });
@@ -2645,6 +2662,7 @@ updateFilename();
 updateMediaUI();
 resizeCanvas();
 buildDemoImage();
+loadMediaFromUrl('./assets/A043_0001_1.mp4', 'A043_0001_1.mp4');
 requestAnimationFrame(loop);
 
 </script>
