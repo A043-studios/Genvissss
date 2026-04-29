@@ -639,6 +639,7 @@
             <div class="scene-card" data-scene="track"><div class="thumb" id="thumb-track"></div><span class="tag">Track</span></div>
             <div class="scene-card" data-scene="cctv"><div class="thumb" id="thumb-cctv"></div><span class="tag">CCTV</span></div>
             <div class="scene-card" data-scene="dissolve"><div class="thumb" id="thumb-dissolve"></div><span class="tag">Dissolve</span></div>
+            <div class="scene-card" data-scene="pose"><div class="thumb" id="thumb-pose"></div><span class="tag">Pose</span></div>
           </div>
           <div id="media-bar" style="margin-top:10px;display:none;gap:6px;">
             <button id="btn-upload" style="flex:1;padding:8px;border-radius:9px;border:1px dashed var(--muted-2);background:transparent;font:inherit;font-size:11.5px;color:var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
@@ -857,6 +858,7 @@ let state = {
     track:     { count:12, sensitivity:0.55, size:0.14, connect:0.7, labels:1, jitter:0.3 },
     cctv:      { grid:3, contrast:1.4, noise:0.25, scan:0.55, tint:0.15, zoom:0.4 },
     dissolve:  { resolution:5, spacing:3, size:4, grain:2, imgOpacity:5, imgBlur:6 },
+    pose:      { skeleton:1, dots:1, bbox:0, alpha:8, lineWidth:3, dotSize:4 },
   }
 };
 
@@ -950,10 +952,18 @@ const paramDefs = {
     { key:"imgOpacity", label:"Img Opacity",min:1, max:8, step:1, fmt:v=>(v|0)+"" },
     { key:"imgBlur",    label:"Img Blur",   min:1, max:8, step:1, fmt:v=>(v|0)+"" },
   ],
+  pose: [
+    { key:"skeleton",  label:"Skeleton",   min:0, max:1,  step:1,    fmt:v=>v?"On":"Off" },
+    { key:"dots",      label:"Joints",     min:0, max:1,  step:1,    fmt:v=>v?"On":"Off" },
+    { key:"bbox",      label:"Bbox",       min:0, max:1,  step:1,    fmt:v=>v?"On":"Off" },
+    { key:"alpha",     label:"Opacity",    min:1, max:8,  step:1,    fmt:v=>(v|0)+"" },
+    { key:"lineWidth", label:"Line Width", min:1, max:8,  step:0.5,  fmt:v=>v.toFixed(1)+"px" },
+    { key:"dotSize",   label:"Dot Size",   min:1, max:12, step:0.5,  fmt:v=>v.toFixed(1)+"px" },
+  ],
 };
 
-const sceneTitles = { recolor:"Recolor", dither:"Dither", halftone:"Halftone", ascii:"ASCII", glitch:"Glitch", tone:"Tone", mosaic:"Mosaic", binary:"Binary", track:"Track", cctv:"CCTV", dissolve:"Dissolve" };
-const mediaScenes = new Set(["recolor","dither","halftone","ascii","glitch","tone","mosaic","binary","track","cctv","dissolve"]);
+const sceneTitles = { recolor:"Recolor", dither:"Dither", halftone:"Halftone", ascii:"ASCII", glitch:"Glitch", tone:"Tone", mosaic:"Mosaic", binary:"Binary", track:"Track", cctv:"CCTV", dissolve:"Dissolve", pose:"Pose" };
+const mediaScenes = new Set(["recolor","dither","halftone","ascii","glitch","tone","mosaic","binary","track","cctv","dissolve","pose"]);
 
 // ========= DOM =========
 const $ = q => document.querySelector(q);
@@ -1089,6 +1099,7 @@ function clearMedia(){
   disposeCCTVCams();
   if(media.el && media.type==="video"){ media.el.pause(); media.el.src=""; }
   media.type = null; media.el = null; media.ready = false; media.name="";
+  poseState.landmarks = null; poseState.lastMediaEl = null;
   updateMediaUI();
 }
 
@@ -1484,7 +1495,7 @@ function drawGrain(alpha=0.08){
 
 // ========= THUMBS (mini-renders) =========
 function renderThumbs(){
-  ["recolor","dither","halftone","ascii","glitch","tone","mosaic","binary","track","cctv","dissolve"].forEach(name=>{
+  ["recolor","dither","halftone","ascii","glitch","tone","mosaic","binary","track","cctv","dissolve","pose"].forEach(name=>{
     const el = document.getElementById("thumb-"+name);
     if(!el) return;
     el.style.background = thumbBgFor(name);
@@ -1512,6 +1523,7 @@ function thumbBgFor(name){
     radial-gradient(circle at 20% 70%, #3ab800 0%, transparent 35%),
     radial-gradient(circle at 80% 65%, #d07020 0%, transparent 40%),
     #f5f5f4`;
+  if(name==="pose")      return `linear-gradient(160deg, ${pal.d} 0%, ${pal.c} 50%, ${pal.b} 100%)`;
   return "#111";
 }
 
@@ -2402,6 +2414,208 @@ function drawDissolve(){
   }
 }
 
+// ---- Scene: POSE OVERLAY ----
+const POSE_CONNECTIONS = [
+  [11,12],[11,13],[13,15],[12,14],[14,16],
+  [11,23],[12,24],[23,24],[23,25],[25,27],[27,29],[29,31],
+  [24,26],[26,28],[28,30],[30,32],
+  [15,17],[15,19],[15,21],[16,18],[16,20],[16,22],
+  [0,1],[1,2],[2,3],[3,7],[0,4],[4,5],[5,6],[6,8],
+  [9,10]
+];
+
+const poseState = {
+  imgLandmarker: null,
+  vidLandmarker: null,
+  loadingImg: false,
+  loadingVid: false,
+  landmarks: null,
+  worldLandmarks: null,
+  lastMediaEl: null,
+};
+
+async function getPoseImgLandmarker() {
+  if(poseState.imgLandmarker) return poseState.imgLandmarker;
+  if(poseState.loadingImg) return null;
+  poseState.loadingImg = true;
+  try {
+    const { PoseLandmarker, FilesetResolver } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/+esm');
+    const vision = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm');
+    poseState.imgLandmarker = await PoseLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task',
+        delegate: 'GPU'
+      },
+      runningMode: 'IMAGE',
+      numPoses: 1
+    });
+  } catch(e) { console.error('PoseLandmarker (image) init failed', e); poseState.loadingImg = false; }
+  return poseState.imgLandmarker;
+}
+
+async function getPoseVidLandmarker() {
+  if(poseState.vidLandmarker) return poseState.vidLandmarker;
+  if(poseState.loadingVid) return null;
+  poseState.loadingVid = true;
+  try {
+    const { PoseLandmarker, FilesetResolver } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/+esm');
+    const vision = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm');
+    poseState.vidLandmarker = await PoseLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task',
+        delegate: 'GPU'
+      },
+      runningMode: 'VIDEO',
+      numPoses: 1
+    });
+  } catch(e) { console.error('PoseLandmarker (video) init failed', e); poseState.loadingVid = false; }
+  return poseState.vidLandmarker;
+}
+
+function poseScaleCoord(nx, ny, dx, dy, dw, dh) {
+  // MediaPipe returns coords normalized to source image dims.
+  // sampleMediaToCanvas uses cover scaling: ratio = max(W/mw, H/mh)
+  // so source pixel (nx*mw, ny*mh) maps to canvas pixel (nx*dw + dx, ny*dh + dy)
+  return [(nx * dw + dx) / W, (ny * dh + dy) / H];
+}
+
+function drawPoseOverlay(lms) {
+  const p   = state.params.pose;
+  const pal = palettes[state.palette];
+  const alpha = gmap(p.alpha, 1, 8, 0.25, 1.0);
+
+  // Compute cover-scale offsets (mirrors sampleMediaToCanvas)
+  const mw = media.ready ? media.width  : demoCanvas.width;
+  const mh = media.ready ? media.height : demoCanvas.height;
+  const ratio = Math.max(W / mw, H / mh);
+  const dw = mw * ratio, dh = mh * ratio;
+  const dx = (W - dw) / 2, dy = (H - dh) / 2;
+
+  // Map all 33 landmarks to canvas-normalized coords
+  const pts = lms.map(lm => poseScaleCoord(lm.x, lm.y, dx, dy, dw, dh));
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Bounding box
+  if(p.bbox) {
+    const visible = lms.filter(lm => lm.visibility > 0.3);
+    if(visible.length > 0) {
+      const xs = visible.map(lm => lm.x * dw + dx);
+      const ys = visible.map(lm => lm.y * dh + dy);
+      const bx1 = Math.min(...xs), bx2 = Math.max(...xs);
+      const by1 = Math.min(...ys), by2 = Math.max(...ys);
+      const pad = 12;
+      ctx.strokeStyle = pal.c;
+      ctx.lineWidth = Math.max(1, p.lineWidth * 0.7);
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(bx1 - pad, by1 - pad, (bx2 - bx1) + pad * 2, (by2 - by1) + pad * 2);
+      ctx.setLineDash([]);
+    }
+  }
+
+  // Skeleton lines
+  if(p.skeleton) {
+    ctx.lineWidth = p.lineWidth;
+    ctx.lineCap = 'round';
+    for(const [a, b] of POSE_CONNECTIONS) {
+      const lmA = lms[a], lmB = lms[b];
+      if(!lmA || !lmB) continue;
+      if(lmA.visibility < 0.2 || lmB.visibility < 0.2) continue;
+      const [ax, ay] = pts[a];
+      const [bx, by] = pts[b];
+      // Left side (odd landmark index) = accent color, right side = secondary
+      const isLeft = a >= 11 && a % 2 === 1;
+      ctx.strokeStyle = isLeft ? pal.b : pal.a;
+      ctx.globalAlpha = alpha * Math.min(lmA.visibility, lmB.visibility);
+      ctx.beginPath();
+      ctx.moveTo(ax * W, ay * H);
+      ctx.lineTo(bx * W, by * H);
+      ctx.stroke();
+    }
+  }
+
+  // Joint dots
+  if(p.dots) {
+    ctx.globalAlpha = alpha;
+    for(let i = 0; i < lms.length; i++) {
+      const lm = lms[i];
+      if(lm.visibility < 0.3) continue;
+      const [nx, ny] = pts[i];
+      ctx.fillStyle = pal.c;
+      ctx.globalAlpha = alpha * lm.visibility;
+      ctx.beginPath();
+      ctx.arc(nx * W, ny * H, p.dotSize, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawPose() {
+  if(!sampleMediaToCanvas()) { drawMediaEmpty(); return; }
+
+  // Draw the media onto main canvas
+  ctx.drawImage(mediaCanvas, 0, 0, W, H);
+
+  const p = state.params.pose;
+  const src = media.ready ? media.el : null;
+
+  if(!src) {
+    // No media — show placeholder text
+    ctx.save();
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.font = `${14 * DPR}px DM Sans, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.fillText("Upload an image or video to detect pose", W / 2, H / 2);
+    ctx.restore();
+    return;
+  }
+
+  if(media.type === "image") {
+    // Detect once when media changes; cache result
+    if(poseState.lastMediaEl !== src) {
+      poseState.lastMediaEl = src;
+      poseState.landmarks = null;
+      getPoseImgLandmarker().then(lm => {
+        if(!lm) return;
+        try {
+          const result = lm.detect(src);
+          poseState.landmarks = result.landmarks.length ? result.landmarks[0] : null;
+        } catch(e) { console.error('pose detect error', e); }
+      });
+    }
+    if(poseState.landmarks) drawPoseOverlay(poseState.landmarks);
+    else if(poseState.loadingImg || poseState.imgLandmarker) {
+      // Model is loading or inference in-progress — show subtle indicator
+      ctx.save();
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.font = `${13 * DPR}px DM Sans, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.fillText(poseState.imgLandmarker ? "Detecting…" : "Loading model…", W / 2, H - 24 * DPR);
+      ctx.restore();
+    }
+  } else if(media.type === "video") {
+    if(!poseState.vidLandmarker && !poseState.loadingVid) getPoseVidLandmarker();
+    if(poseState.vidLandmarker) {
+      try {
+        const result = poseState.vidLandmarker.detectForVideo(src, performance.now());
+        poseState.landmarks = result.landmarks.length ? result.landmarks[0] : null;
+      } catch(e) {}
+    }
+    if(poseState.landmarks) drawPoseOverlay(poseState.landmarks);
+    else {
+      ctx.save();
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.font = `${13 * DPR}px DM Sans, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.fillText(poseState.vidLandmarker ? "Detecting…" : "Loading model…", W / 2, H - 24 * DPR);
+      ctx.restore();
+    }
+  }
+}
+
 function drawMediaEmpty(){
   ctx.fillStyle = state.bg;
   ctx.fillRect(0,0,W,H);
@@ -2436,6 +2650,7 @@ function loop(t){
     case "track":     drawTrack(time);    break;
     case "cctv":      drawCCTV(time);     break;
     case "dissolve":  drawDissolve();     break;
+    case "pose":      drawPose();         break;
   }
 
   requestAnimationFrame(loop);
