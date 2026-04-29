@@ -2447,7 +2447,7 @@ async function getPoseImgLandmarker() {
         delegate: 'GPU'
       },
       runningMode: 'IMAGE',
-      numPoses: 1
+      numPoses: 6
     });
   } catch(e) { console.error('PoseLandmarker (image) init failed', e); poseState.loadingImg = false; }
   return poseState.imgLandmarker;
@@ -2466,7 +2466,7 @@ async function getPoseVidLandmarker() {
         delegate: 'GPU'
       },
       runningMode: 'VIDEO',
-      numPoses: 1
+      numPoses: 6
     });
   } catch(e) { console.error('PoseLandmarker (video) init failed', e); poseState.loadingVid = false; }
   return poseState.vidLandmarker;
@@ -2479,10 +2479,44 @@ function poseScaleCoord(nx, ny, dx, dy, dw, dh) {
   return [(nx * dw + dx) / W, (ny * dh + dy) / H];
 }
 
-function drawPoseOverlay(lms) {
-  const p   = state.params.pose;
-  const pal = palettes[state.palette];
+// Per-person hue shifts applied to palette colors so each person gets a distinct tint
+const POSE_PERSON_HUES = [0, 120, 240, 60, 180, 300];
+
+function shiftHue(hex, deg) {
+  const [r, g, b] = hexToRgb(hex);
+  const max = Math.max(r, g, b) / 255, min = Math.min(r, g, b) / 255;
+  const l = (max + min) / 2;
+  let h = 0, s = 0;
+  if(max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if(max === r/255) h = ((g - b) / 255 / d + (g < b ? 6 : 0)) / 6;
+    else if(max === g/255) h = ((b - r) / 255 / d + 2) / 6;
+    else h = ((r - g) / 255 / d + 4) / 6;
+  }
+  h = (h + deg / 360 + 1) % 1;
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p2 = 2 * l - q;
+  function hue2rgb(t) {
+    if(t < 0) t += 1; if(t > 1) t -= 1;
+    if(t < 1/6) return p2 + (q - p2) * 6 * t;
+    if(t < 1/2) return q;
+    if(t < 2/3) return p2 + (q - p2) * (2/3 - t) * 6;
+    return p2;
+  }
+  return `rgb(${(hue2rgb(h+1/3)*255)|0},${(hue2rgb(h)*255)|0},${(hue2rgb(h-1/3)*255)|0})`;
+}
+
+function drawPoseOverlay(lms, personIdx) {
+  const p     = state.params.pose;
+  const pal   = palettes[state.palette];
   const alpha = gmap(p.alpha, 1, 8, 0.25, 1.0);
+  const hShift = POSE_PERSON_HUES[personIdx % POSE_PERSON_HUES.length];
+
+  // Per-person palette colors (hue-shifted so each person has a distinct look)
+  const colA = hShift === 0 ? pal.a : shiftHue(pal.a, hShift);
+  const colB = hShift === 0 ? pal.b : shiftHue(pal.b, hShift);
+  const colC = hShift === 0 ? pal.c : shiftHue(pal.c, hShift);
 
   // Compute cover-scale offsets (mirrors sampleMediaToCanvas)
   const mw = media.ready ? media.width  : demoCanvas.width;
@@ -2506,7 +2540,7 @@ function drawPoseOverlay(lms) {
       const bx1 = Math.min(...xs), bx2 = Math.max(...xs);
       const by1 = Math.min(...ys), by2 = Math.max(...ys);
       const pad = 12;
-      ctx.strokeStyle = pal.c;
+      ctx.strokeStyle = colC;
       ctx.lineWidth = Math.max(1, p.lineWidth * 0.7);
       ctx.setLineDash([6, 4]);
       ctx.strokeRect(bx1 - pad, by1 - pad, (bx2 - bx1) + pad * 2, (by2 - by1) + pad * 2);
@@ -2524,9 +2558,8 @@ function drawPoseOverlay(lms) {
       if(lmA.visibility < 0.2 || lmB.visibility < 0.2) continue;
       const [ax, ay] = pts[a];
       const [bx, by] = pts[b];
-      // Left side (odd landmark index) = accent color, right side = secondary
       const isLeft = a >= 11 && a % 2 === 1;
-      ctx.strokeStyle = isLeft ? pal.b : pal.a;
+      ctx.strokeStyle = isLeft ? colB : colA;
       ctx.globalAlpha = alpha * Math.min(lmA.visibility, lmB.visibility);
       ctx.beginPath();
       ctx.moveTo(ax * W, ay * H);
@@ -2537,12 +2570,11 @@ function drawPoseOverlay(lms) {
 
   // Joint dots
   if(p.dots) {
-    ctx.globalAlpha = alpha;
     for(let i = 0; i < lms.length; i++) {
       const lm = lms[i];
       if(lm.visibility < 0.3) continue;
       const [nx, ny] = pts[i];
-      ctx.fillStyle = pal.c;
+      ctx.fillStyle = colC;
       ctx.globalAlpha = alpha * lm.visibility;
       ctx.beginPath();
       ctx.arc(nx * W, ny * H, p.dotSize, 0, Math.PI * 2);
@@ -2582,11 +2614,11 @@ function drawPose() {
         if(!lm) return;
         try {
           const result = lm.detect(src);
-          poseState.landmarks = result.landmarks.length ? result.landmarks[0] : null;
+          poseState.landmarks = result.landmarks.length ? result.landmarks : null;
         } catch(e) { console.error('pose detect error', e); }
       });
     }
-    if(poseState.landmarks) drawPoseOverlay(poseState.landmarks);
+    if(poseState.landmarks) poseState.landmarks.forEach((lms, i) => drawPoseOverlay(lms, i));
     else if(poseState.loadingImg || poseState.imgLandmarker) {
       // Model is loading or inference in-progress — show subtle indicator
       ctx.save();
@@ -2601,10 +2633,10 @@ function drawPose() {
     if(poseState.vidLandmarker) {
       try {
         const result = poseState.vidLandmarker.detectForVideo(src, performance.now());
-        poseState.landmarks = result.landmarks.length ? result.landmarks[0] : null;
+        poseState.landmarks = result.landmarks.length ? result.landmarks : null;
       } catch(e) {}
     }
-    if(poseState.landmarks) drawPoseOverlay(poseState.landmarks);
+    if(poseState.landmarks) poseState.landmarks.forEach((lms, i) => drawPoseOverlay(lms, i));
     else {
       ctx.save();
       ctx.fillStyle = "rgba(255,255,255,0.5)";
